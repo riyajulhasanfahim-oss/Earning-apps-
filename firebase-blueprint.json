@@ -1,0 +1,1059 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered AdView Earn user profile, referral identity, and server-governed reward balances.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "username": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[a-zA-Z0-9_]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 120 },
+        "phoneNumber": { "type": "string", "minLength": 0, "maxLength": 25 },
+        "profileImage": { "type": "string", "maxLength": 500 },
+        "referralCode": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[A-Z0-9_]+$" },
+        "referredBy": { "type": "string", "maxLength": 128 },
+        "points": { "type": "number" },
+        "totalEarnings": { "type": "number" },
+        "totalAdViews": { "type": "number" },
+        "accountStatus": { "type": "string", "enum": ["active", "restricted", "suspended", "banned"] },
+        "emailVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid", "fullName", "username", "email", "phoneNumber", "profileImage",
+        "referralCode", "referredBy", "points", "totalEarnings", "totalAdViews",
+        "accountStatus", "emailVerified", "createdAt"
+      ]
+    },
+    "Wallet": {
+      "title": "Wallet",
+      "description": "Server-governed per-user wallet balance, reserved points, pending earnings, and lifetime totals.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "totalPoints": { "type": "number" },
+        "availablePoints": { "type": "number" },
+        "pendingPoints": { "type": "number" },
+        "reservedPoints": { "type": "number" },
+        "totalEarnedPoints": { "type": "number" },
+        "totalWithdrawnPoints": { "type": "number" },
+        "totalWithdrawnBdt": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "totalPoints", "availablePoints", "pendingPoints", "reservedPoints",
+        "totalEarnedPoints", "totalWithdrawnPoints", "totalWithdrawnBdt", "updatedAt"
+      ]
+    },
+    "WalletLedgerEntry": {
+      "title": "WalletLedgerEntry",
+      "description": "Immutable server-written ledger entry capturing previous/new balances and historical conversion rate per credit/debit.",
+      "type": "object",
+      "properties": {
+        "entryId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "transactionId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "entryType": { "type": "string", "enum": ["credit", "debit", "reserve", "release"] },
+        "transactionType": { "type": "string", "enum": ["ad_reward", "daily_bonus", "referral_bonus", "withdrawal", "admin_credit", "admin_debit", "refund"] },
+        "pointsDelta": { "type": "number" },
+        "bdtAmount": { "type": "number" },
+        "conversionRateUsed": { "type": "number" },
+        "previousPoints": { "type": "number" },
+        "newPoints": { "type": "number" },
+        "previousReservedPoints": { "type": "number" },
+        "newReservedPoints": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "pending", "rejected", "reversed"] },
+        "description": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "entryId", "transactionId", "userId", "entryType", "transactionType",
+        "pointsDelta", "bdtAmount", "conversionRateUsed", "previousPoints", "newPoints",
+        "previousReservedPoints", "newReservedPoints", "status", "description", "createdAt"
+      ]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Server-validated payout request with atomic balance reservation and full audit trail.",
+      "type": "object",
+      "properties": {
+        "requestId": { "type": "string", "minLength": 4, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "transactionId": { "type": "string", "minLength": 2, "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "methodId": { "type": "string", "enum": ["bkash", "nagad", "rocket", "bank"] },
+        "accountNumber": { "type": "string", "minLength": 6, "maxLength": 80 },
+        "maskedAccountNumber": { "type": "string", "minLength": 4, "maxLength": 80 },
+        "accountType": { "type": "string", "enum": ["personal", "agent", "merchant", "bank_account"] },
+        "optionalNote": { "type": "string", "maxLength": 200 },
+        "pointsReserved": { "type": "number" },
+        "grossBdt": { "type": "number" },
+        "feeBdt": { "type": "number" },
+        "netBdt": { "type": "number" },
+        "conversionRateUsed": { "type": "number" },
+        "dhakaDate": { "type": "string", "maxLength": 10 },
+        "dhakaMonth": { "type": "string", "maxLength": 7 },
+        "status": { "type": "string", "enum": ["pending", "processing", "approved", "paid", "rejected", "cancelled"] },
+        "payoutTransactionId": { "type": "string", "maxLength": 128 },
+        "rejectionReason": { "type": "string", "maxLength": 300 },
+        "processingDate": { "type": "string", "format": "date-time" },
+        "paidAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "requestId", "transactionId", "userId", "methodId", "accountNumber", "maskedAccountNumber",
+        "accountType", "pointsReserved", "grossBdt", "feeBdt", "netBdt", "conversionRateUsed", "status", "createdAt"
+      ]
+    },
+    "PaymentMethod": {
+      "title": "PaymentMethod",
+      "description": "Admin-controlled payout channel configuration (bKash, Nagad, Rocket, Bank Transfer).",
+      "type": "object",
+      "properties": {
+        "methodId": { "type": "string", "enum": ["bkash", "nagad", "rocket", "bank"] },
+        "name": { "type": "string", "minLength": 2, "maxLength": 50 },
+        "bengaliName": { "type": "string", "maxLength": 50 },
+        "enabled": { "type": "boolean" },
+        "minPoints": { "type": "number" },
+        "feePercent": { "type": "number" },
+        "processingWindow": { "type": "string", "maxLength": 120 },
+        "allowedAccountTypes": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["methodId", "name", "enabled", "feePercent", "processingWindow", "updatedAt"]
+    },
+    "WithdrawalSettings": {
+      "title": "WithdrawalSettings",
+      "description": "Admin-controlled global withdrawal limits, daily/monthly caps, and payout toggle.",
+      "type": "object",
+      "properties": {
+        "withdrawalEnabled": { "type": "boolean" },
+        "minimumWithdrawPoints": { "type": "number" },
+        "maximumWithdrawBdt": { "type": "number" },
+        "defaultFeePercent": { "type": "number" },
+        "dailyLimitBdt": { "type": "number" },
+        "dailyLimitCount": { "type": "number" },
+        "monthlyLimitBdt": { "type": "number" },
+        "processingTimeLabel": { "type": "string", "maxLength": 120 },
+        "allowedMethods": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["withdrawalEnabled", "dailyLimitCount", "processingTimeLabel", "updatedAt"]
+    },
+    "AdminLog": {
+      "title": "AdminLog",
+      "description": "Immutable admin audit log recording withdrawal approvals, rejections, payouts, role updates, and rule changes.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 2, "maxLength": 128 },
+        "adminUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "adminEmail": { "type": "string", "maxLength": 120 },
+        "adminRole": { "type": "string", "enum": ["super_admin", "admin", "support_admin"] },
+        "action": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "previousValue": { "type": "string", "maxLength": 500 },
+        "newValue": { "type": "string", "maxLength": 500 },
+        "metadata": { "type": "string", "maxLength": 500 },
+        "details": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "adminUid", "adminEmail", "action", "targetId", "details", "createdAt"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Admin-controlled platform wallet, conversion rate, withdrawal limits, and feature toggles.",
+      "type": "object",
+      "properties": {
+        "pointsPerBdt": { "type": "number" },
+        "minimumWithdrawPoints": { "type": "number" },
+        "maximumWithdrawAmountBdt": { "type": "number" },
+        "walletEnabled": { "type": "boolean" },
+        "earningEnabled": { "type": "boolean" },
+        "dailyBonusPoints": { "type": "number" },
+        "dailyAdLimit": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["walletEnabled", "earningEnabled", "dailyAdLimit", "updatedAt"]
+    },
+    "DailyBonusAdSettings": {
+      "title": "DailyBonusAdSettings",
+      "description": "Admin-controlled Daily Check-in Bonus Monetag Direct Link configuration.",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "monetagDirectLinkUrl": { "type": "string", "maxLength": 1000 },
+        "rewardPoints": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "incentivizedTrafficAllowed": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "enabled",
+        "monetagDirectLinkUrl",
+        "durationSeconds",
+        "incentivizedTrafficAllowed",
+        "updatedAt"
+      ]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Public website branding, theme colors, header/footer/login copy, support contacts, maintenance mode, and registration toggle.",
+      "type": "object",
+      "properties": {
+        "websiteName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "websiteTitle": { "type": "string", "maxLength": 120 },
+        "websiteLogoUrl": { "type": "string", "maxLength": 500 },
+        "websiteFaviconUrl": { "type": "string", "maxLength": 500 },
+        "loadingLogoUrl": { "type": "string", "maxLength": 500 },
+        "websiteDescription": { "type": "string", "maxLength": 400 },
+        "primaryColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "secondaryColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "loginBrandingTitle": { "type": "string", "maxLength": 100 },
+        "loginBrandingSubtitle": { "type": "string", "maxLength": 240 },
+        "headerBrandText": { "type": "string", "maxLength": 80 },
+        "footerText": { "type": "string", "maxLength": 200 },
+        "supportEmail": { "type": "string", "maxLength": 120 },
+        "supportContact": { "type": "string", "maxLength": 120 },
+        "maintenanceMode": { "type": "boolean" },
+        "registrationEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["websiteName", "maintenanceMode", "registrationEnabled", "updatedAt"]
+    },
+    "AdminNotificationReadState": {
+      "title": "AdminNotificationReadState",
+      "description": "Per-admin acknowledged notification IDs for Admin Notification Center.",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "readIds": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminUid", "readIds", "updatedAt"]
+    },
+    "ReferralCodeLookup": {
+      "title": "ReferralCodeLookup",
+      "description": "Non-PII lookup index for referral codes.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[A-Z0-9_]+$" },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[a-zA-Z0-9_]+$" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "ownerUid", "username", "active", "createdAt"]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "One-time referral attribution and qualification tracking record.",
+      "type": "object",
+      "properties": {
+        "referralId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referrerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referredUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referredName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "referredUsername": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[a-zA-Z0-9_]+$" },
+        "referralCodeUsed": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[A-Z0-9_]+$" },
+        "qualificationStatus": { "type": "string", "enum": ["registered", "pending", "qualified", "rewarded", "rejected"] },
+        "rewardStatus": { "type": "string", "enum": ["pending", "credited", "rejected"] },
+        "rewardPoints": { "type": "number" },
+        "bonusEarnedPoints": { "type": "number" },
+        "newUserBonusPoints": { "type": "number" },
+        "rejectionReason": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "qualifiedAt": { "type": "string", "format": "date-time" },
+        "rewardedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "referralId", "referrerUid", "referredUid", "referredName", "referredUsername",
+        "referralCodeUsed", "qualificationStatus", "rewardStatus", "rewardPoints",
+        "bonusEarnedPoints", "newUserBonusPoints", "rejectionReason", "status", "createdAt"
+      ]
+    },
+    "ReferralReward": {
+      "title": "ReferralReward",
+      "description": "Idempotent server-issued referral bonus credit record preventing duplicate payouts.",
+      "type": "object",
+      "properties": {
+        "rewardId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referralId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referrerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referredUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referrerBonusPoints": { "type": "number" },
+        "newUserBonusPoints": { "type": "number" },
+        "transactionId": { "type": "string", "minLength": 2, "maxLength": 128 },
+        "newUserTransactionId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["credited", "reversed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "rewardId", "referralId", "referrerUid", "referredUid",
+        "referrerBonusPoints", "newUserBonusPoints", "transactionId", "status", "createdAt"
+      ]
+    },
+    "ReferralSettings": {
+      "title": "ReferralSettings",
+      "description": "Admin-controlled referral program toggles, bonus points, qualification threshold, and caps.",
+      "type": "object",
+      "properties": {
+        "referralEnabled": { "type": "boolean" },
+        "referrerBonusPoints": { "type": "number" },
+        "newUserBonusPoints": { "type": "number" },
+        "minimumQualificationAds": { "type": "number" },
+        "requireEmailVerified": { "type": "boolean" },
+        "requireActiveAccount": { "type": "boolean" },
+        "maxReferralsPerUser": { "type": "number" },
+        "dailyReferralCap": { "type": "number" },
+        "referralRulesText": { "type": "string", "maxLength": 600 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "referralEnabled", "minimumQualificationAds", "requireEmailVerified",
+        "requireActiveAccount", "dailyReferralCap", "referralRulesText", "updatedAt"
+      ]
+    },
+    "ReferralLog": {
+      "title": "ReferralLog",
+      "description": "Immutable admin/server referral security, rejection, and qualification audit log.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referrerUid": { "type": "string", "maxLength": 128 },
+        "referredUid": { "type": "string", "maxLength": 128 },
+        "eventType": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "details": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "eventType", "severity", "details", "createdAt"]
+    },
+    "ReferralLeaderboardEntry": {
+      "title": "ReferralLeaderboardEntry",
+      "description": "Privacy-safe public leaderboard summary containing only masked username and qualified totals (no PII).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "publicUsername": { "type": "string", "minLength": 2, "maxLength": 40 },
+        "totalQualifiedReferrals": { "type": "number" },
+        "totalReferralRewards": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "publicUsername", "totalQualifiedReferrals", "totalReferralRewards", "updatedAt"]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Server-managed administrator role marker synchronized with Firebase Auth Custom Claims.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "support_admin"] },
+        "email": { "type": "string", "maxLength": 120 },
+        "assignedBy": { "type": "string", "maxLength": 128 },
+        "grantedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role", "grantedAt"]
+    },
+    "FailedTransactionLog": {
+      "title": "FailedTransactionLog",
+      "description": "Immutable backend log capturing failed or rejected wallet, withdrawal, and reward transactions.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "operation": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "errorCode": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "transactionId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "userId", "operation", "errorCode", "details", "createdAt"]
+    },
+    "ReconciliationReport": {
+      "title": "ReconciliationReport",
+      "description": "Server-generated wallet vs walletLedger reconciliation audit report detecting balance discrepancies.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "walletTotalPoints": { "type": "number" },
+        "walletReservedPoints": { "type": "number" },
+        "ledgerNetPoints": { "type": "number" },
+        "ledgerReservedPoints": { "type": "number" },
+        "discrepancyPoints": { "type": "number" },
+        "status": { "type": "string", "enum": ["matched", "mismatch_detected", "resolved"] },
+        "details": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "reportId", "userId", "walletTotalPoints", "walletReservedPoints",
+        "ledgerNetPoints", "ledgerReservedPoints", "discrepancyPoints", "status", "createdAt"
+      ]
+    },
+    "SystemError": {
+      "title": "SystemError",
+      "description": "Structured client and backend operational error log for monitoring.",
+      "type": "object",
+      "properties": {
+        "errorId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "source": { "type": "string", "enum": ["client", "cloud_function", "app_check", "firestore"] },
+        "operation": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "message": { "type": "string", "minLength": 2, "maxLength": 500 },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["errorId", "userId", "source", "operation", "message", "severity", "createdAt"]
+    },
+    "EconomyConfig": {
+      "title": "EconomyConfig",
+      "description": "Admin-controlled conversion rate, daily bonus, withdraw minimums, and daily ad limit.",
+      "type": "object",
+      "properties": {
+        "pointsPerBdt": { "type": "number" },
+        "dailyBonusPoints": { "type": "number" },
+        "minimumWithdrawPoints": { "type": "number" },
+        "dailyAdLimit": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["updatedAt"]
+    },
+    "Advertisement": {
+      "title": "Advertisement",
+      "description": "Admin-controlled advertisement campaign with network, placement, dates, countries, and verification method.",
+      "type": "object",
+      "properties": {
+        "adId": { "type": "string", "minLength": 2, "maxLength": 80, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "adNetwork": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "adType": { "type": "string", "enum": ["rewarded", "direct_link", "other"] },
+        "placementOrUrl": { "type": "string", "minLength": 2, "maxLength": 500 },
+        "rewardPoints": { "type": "number" },
+        "dailyLimit": { "type": "number" },
+        "estimatedDuration": { "type": "number" },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "endDate": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "allowedCountries": { "type": "string", "maxLength": 200 },
+        "rewardVerificationMethod": { "type": "string", "enum": ["s2s_postback", "sdk_callback", "none"] },
+        "incentivizedTrafficAllowed": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "adId", "adName", "adNetwork", "adType", "placementOrUrl",
+        "rewardPoints", "dailyLimit", "estimatedDuration",
+        "startDate", "endDate", "status", "allowedCountries",
+        "rewardVerificationMethod", "incentivizedTrafficAllowed", "createdAt"
+      ]
+    },
+    "AdSession": {
+      "title": "AdSession",
+      "description": "Initiated ad-watching session awaiting server-side S2S callback or SDK verification.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "minLength": 4, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adId": { "type": "string", "minLength": 2, "maxLength": 80, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "adNetwork": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "expectedRewardPoints": { "type": "number" },
+        "dhakaDate": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "transactionId": { "type": "string", "maxLength": 128 },
+        "rejectionReason": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "sessionId", "userId", "adId", "adName", "adNetwork",
+        "expectedRewardPoints", "dhakaDate", "status", "createdAt"
+      ]
+    },
+    "AdCompletion": {
+      "title": "AdCompletion",
+      "description": "Server-verified idempotent ad completion record preventing duplicate callbacks and enforcing daily per-ad caps.",
+      "type": "object",
+      "properties": {
+        "completionId": { "type": "string", "minLength": 2, "maxLength": 128 },
+        "providerTxId": { "type": "string", "minLength": 2, "maxLength": 128 },
+        "sessionId": { "type": "string", "minLength": 4, "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "adId": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "adName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "adNetwork": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "rewardPoints": { "type": "number" },
+        "transactionId": { "type": "string", "minLength": 2, "maxLength": 128 },
+        "dhakaDate": { "type": "string", "minLength": 10, "maxLength": 10 },
+        "status": { "type": "string", "enum": ["completed", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "completionId", "providerTxId", "sessionId", "userId", "adId",
+        "adName", "adNetwork", "rewardPoints", "transactionId",
+        "dhakaDate", "status", "createdAt"
+      ]
+    },
+    "DailyAdLimit": {
+      "title": "DailyAdLimit",
+      "description": "Server-governed daily ad completion counter keyed by {uid}_{Asia/Dhaka YYYY-MM-DD}.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "dhakaDate": { "type": "string", "minLength": 10, "maxLength": 10 },
+        "completedCount": { "type": "number" },
+        "earnedPoints": { "type": "number" },
+        "completedAdIds": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "dhakaDate", "completedCount", "earnedPoints", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Server-written immutable financial & reward ledger preserving historical conversion rates.",
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "subtitle": { "type": "string", "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 300 },
+        "type": { "type": "string", "enum": ["ad_reward", "daily_bonus", "referral_bonus", "withdrawal", "admin_credit", "admin_debit", "refund", "admin_adjustment"] },
+        "direction": { "type": "string", "enum": ["credit", "debit"] },
+        "pointsDelta": { "type": "number" },
+        "points": { "type": "number" },
+        "bdtAmount": { "type": "number" },
+        "conversionRateUsed": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "pending", "rejected", "reversed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "type", "pointsDelta", "status", "createdAt"]
+    },
+    "DailyBonusState": {
+      "title": "DailyBonusState",
+      "description": "Server-managed daily check-in state.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "streakDays": { "type": "number" },
+        "lastClaimDate": { "type": "string", "maxLength": 20 },
+        "lastClaimPoints": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "streakDays", "lastClaimDate", "updatedAt"]
+    },
+    "FraudLog": {
+      "title": "FraudLog",
+      "description": "Server-written security & suspicious callback audit log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "reason": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "details": { "type": "string", "maxLength": 500 },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reason", "severity", "createdAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "Per-user notification item.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "message": { "type": "string", "minLength": 2, "maxLength": 300 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "read", "createdAt"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Read-only Firestore client connectivity probe document.",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["status"]
+    },
+    "AdNetwork": {
+      "title": "AdNetwork",
+      "description": "Public (non-secret) configuration and health state for an advertising network.",
+      "type": "object",
+      "properties": {
+        "networkId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "networkName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "logoKey": { "type": "string", "enum": ["monetag", "applixir", "adsterra", "custom"] },
+        "integrationType": { "type": "string", "enum": ["s2s_postback", "sdk_callback", "direct_link", "hybrid"] },
+        "publisherId": { "type": "string", "maxLength": 120 },
+        "websiteId": { "type": "string", "maxLength": 120 },
+        "placementId": { "type": "string", "maxLength": 120 },
+        "directLinkUrl": { "type": "string", "maxLength": 500 },
+        "apiBaseUrl": { "type": "string", "maxLength": 300 },
+        "callbackUrl": { "type": "string", "maxLength": 500 },
+        "postbackParamsTemplate": { "type": "string", "maxLength": 400 },
+        "incentivizedTrafficAllowed": { "type": "boolean" },
+        "rewardVerificationSupported": { "type": "boolean" },
+        "rewardEnabled": { "type": "boolean" },
+        "clicksSupported": { "type": "boolean" },
+        "apiHealthSupported": { "type": "boolean" },
+        "secretConfigured": { "type": "boolean" },
+        "secretHint": { "type": "string", "maxLength": 24 },
+        "healthStatus": { "type": "string", "enum": ["connected", "configuration_required", "verification_pending", "error", "disabled"] },
+        "healthMessage": { "type": "string", "maxLength": 300 },
+        "enabled": { "type": "boolean" },
+        "lastTestedAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "networkId",
+        "networkName",
+        "logoKey",
+        "integrationType",
+        "incentivizedTrafficAllowed",
+        "rewardVerificationSupported",
+        "rewardEnabled",
+        "clicksSupported",
+        "secretConfigured",
+        "healthStatus",
+        "enabled",
+        "updatedAt"
+      ]
+    },
+    "AdNetworkSecret": {
+      "title": "AdNetworkSecret",
+      "description": "Server-only private API keys and callback secrets for an ad network. Strictly denied for all client reads/writes.",
+      "type": "object",
+      "properties": {
+        "networkId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "callbackSecret": { "type": "string", "maxLength": 256 },
+        "apiKey": { "type": "string", "maxLength": 256 },
+        "webhookToken": { "type": "string", "maxLength": 256 },
+        "rotatedByUid": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["networkId", "updatedAt"]
+    },
+    "AdPlacement": {
+      "title": "AdPlacement",
+      "description": "Admin-managed ad placements and Direct Links with explicit network policy and reward eligibility flags.",
+      "type": "object",
+      "properties": {
+        "placementId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "networkId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "networkName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "placementName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "placementCategory": { "type": "string", "maxLength": 60 },
+        "adType": { "type": "string", "enum": ["rewarded", "direct_link", "other"] },
+        "destinationUrl": { "type": "string", "maxLength": 500 },
+        "zoneOrPlacementCode": { "type": "string", "maxLength": 120 },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "endDate": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "incentivizedTrafficApproved": { "type": "boolean" },
+        "rewardEligible": { "type": "boolean" },
+        "linkedAdId": { "type": "string", "maxLength": 80 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "placementId",
+        "networkId",
+        "networkName",
+        "placementName",
+        "adType",
+        "status",
+        "incentivizedTrafficApproved",
+        "rewardEligible",
+        "updatedAt"
+      ]
+    },
+    "AdCampaign": {
+      "title": "AdCampaign",
+      "description": "Admin-governed advertisement campaign configuration with user & global daily limits.",
+      "type": "object",
+      "properties": {
+        "campaignId": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "campaignName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "networkId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "networkName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "placementId": { "type": "string", "maxLength": 80 },
+        "campaignType": { "type": "string", "enum": ["rewarded", "direct_link", "other"] },
+        "rewardPoints": { "type": "number", "minimum": 0 },
+        "dailyUserLimit": { "type": "number", "minimum": 1 },
+        "globalDailyLimit": { "type": "number", "minimum": 1 },
+        "globalCompletedToday": { "type": "number", "minimum": 0 },
+        "globalCompletedDhakaDate": { "type": "string", "maxLength": 20 },
+        "estimatedDuration": { "type": "number", "minimum": 1 },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "endDate": { "type": "string", "maxLength": 20 },
+        "targetCountries": { "type": "string", "maxLength": 120 },
+        "rewardVerificationMethod": { "type": "string", "enum": ["s2s_postback", "sdk_callback", "none"] },
+        "incentivizedTrafficAllowed": { "type": "boolean" },
+        "rewardEligible": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "linkedAdId": { "type": "string", "maxLength": 80 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "campaignId",
+        "campaignName",
+        "networkId",
+        "networkName",
+        "campaignType",
+        "rewardPoints",
+        "dailyUserLimit",
+        "globalDailyLimit",
+        "rewardVerificationMethod",
+        "incentivizedTrafficAllowed",
+        "rewardEligible",
+        "status",
+        "updatedAt"
+      ]
+    },
+    "AdCallback": {
+      "title": "AdCallback",
+      "description": "Server-written S2S postback & SDK callback verification ledger with replay & expiry checks.",
+      "type": "object",
+      "properties": {
+        "callbackId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "networkId": { "type": "string", "maxLength": 64 },
+        "campaignId": { "type": "string", "maxLength": 80 },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["processed", "rejected", "duplicate", "expired", "invalid_signature"] },
+        "signatureValid": { "type": "boolean" },
+        "timestampValid": { "type": "boolean" },
+        "replayDetected": { "type": "boolean" },
+        "rewardPoints": { "type": "number", "minimum": 0 },
+        "rejectionReason": { "type": "string", "maxLength": 300 },
+        "callbackTimestampSec": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "callbackId",
+        "eventId",
+        "networkId",
+        "status",
+        "signatureValid",
+        "timestampValid",
+        "replayDetected",
+        "rewardPoints",
+        "createdAt"
+      ]
+    },
+    "AdAnalytics": {
+      "title": "AdAnalytics",
+      "description": "Per-network daily metrics derived exclusively from verified server completions, sessions, and provider responses.",
+      "type": "object",
+      "properties": {
+        "analyticsId": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "networkId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "networkName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "dhakaDate": { "type": "string", "maxLength": 20 },
+        "impressions": { "type": "number", "minimum": 0 },
+        "clicks": { "type": ["number", "null"] },
+        "clicksSupported": { "type": "boolean" },
+        "verifiedCompletions": { "type": "number", "minimum": 0 },
+        "rejectedCompletions": { "type": "number", "minimum": 0 },
+        "totalRewardsDistributed": { "type": "number", "minimum": 0 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "analyticsId",
+        "networkId",
+        "networkName",
+        "dhakaDate",
+        "impressions",
+        "clicksSupported",
+        "verifiedCompletions",
+        "rejectedCompletions",
+        "totalRewardsDistributed",
+        "updatedAt"
+      ]
+    },
+    "AdNetworkLog": {
+      "title": "AdNetworkLog",
+      "description": "Immutable operational & security log for Ad Network config edits, connection checks, and callback failures.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "networkId": { "type": "string", "maxLength": 64 },
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "actorEmail": { "type": "string", "maxLength": 120 },
+        "eventType": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "severity": { "type": "string", "enum": ["info", "warning", "error"] },
+        "status": { "type": "string", "maxLength": 40 },
+        "details": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "networkId", "eventType", "severity", "details", "createdAt"]
+    },
+    "FraudReport": {
+      "title": "FraudReport",
+      "description": "False-positive-safe risk-scored fraud report queued for Admin review and resolution.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "category": { "type": "string", "enum": ["multi_account", "ad_reward", "referral", "withdrawal", "auth_security"] },
+        "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+        "riskScore": { "type": "number", "minimum": 0, "maximum": 100 },
+        "reviewStatus": { "type": "string", "enum": ["pending_review", "reviewed", "verification_requested", "restricted", "suspended", "restored"] },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 120 },
+        "userName": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "details": { "type": "string", "maxLength": 600 },
+        "signals": { "type": "array" },
+        "relatedTxId": { "type": "string", "maxLength": 128 },
+        "actionTaken": { "type": "string", "maxLength": 120 },
+        "reviewedBy": { "type": "string", "maxLength": 128 },
+        "reviewedEmail": { "type": "string", "maxLength": 120 },
+        "resolutionNote": { "type": "string", "maxLength": 400 },
+        "falsePositiveProtected": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "reportId", "category", "riskLevel", "riskScore", "reviewStatus",
+        "userId", "title", "details", "signals", "falsePositiveProtected",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "SecurityAuditLog": {
+      "title": "SecurityAuditLog",
+      "description": "Immutable security and financial audit trail across Auth, Wallet, Ad Rewards, Withdrawals, Referrals, and Admin Actions.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "eventType": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "category": { "type": "string", "enum": ["auth", "wallet", "ad_reward", "withdrawal", "referral", "admin", "account_restriction", "security"] },
+        "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] },
+        "transactionId": { "type": "string", "maxLength": 128 },
+        "riskScore": { "type": ["number", "null"] },
+        "details": { "type": "string", "maxLength": 500 },
+        "metadata": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "userId", "eventType", "category", "severity", "details", "createdAt"]
+    },
+    "RateLimitBucket": {
+      "title": "RateLimitBucket",
+      "description": "Server-only atomic rate-limit sliding/fixed window buckets (zero client access).",
+      "type": "object",
+      "properties": {
+        "bucketKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actionName": { "type": "string", "maxLength": 80 },
+        "actorId": { "type": "string", "maxLength": 128 },
+        "windowStartedAtMs": { "type": "number" },
+        "count": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bucketKey", "actionName", "windowStartedAtMs", "count", "updatedAt"]
+    },
+    "DirectLinkAd": {
+      "title": "DirectLinkAd",
+      "description": "Admin-managed Monetag and Advertising Direct Links mapped to website placements with optional approved S2S rewarded verification.",
+      "type": "object",
+      "properties": {
+        "linkId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "url": { "type": "string", "minLength": 10, "maxLength": 500 },
+        "adNetwork": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "placement": { "type": "string", "enum": ["home_page", "available_ads", "watch_ads", "daily_bonus", "featured_section"] },
+        "rewardPoints": { "type": "number", "minimum": 0, "maximum": 10000 },
+        "estimatedDuration": { "type": "number", "minimum": 30, "maximum": 180 },
+        "dailyLimit": { "type": "number", "minimum": 1, "maximum": 500 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "incentivizedTrafficAllowed": { "type": "boolean" },
+        "rewardVerificationMethod": { "type": "string", "enum": ["s2s_postback", "sdk_callback", "none"] },
+        "sortOrder": { "type": "number", "minimum": 0, "maximum": 1000 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "linkId",
+        "title",
+        "url",
+        "adNetwork",
+        "placement",
+        "rewardPoints",
+        "estimatedDuration",
+        "dailyLimit",
+        "status",
+        "incentivizedTrafficAllowed",
+        "rewardVerificationMethod",
+        "sortOrder",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Private user profiles and server-governed balances."
+    },
+    "/wallets/{userId}": {
+      "schema": { "$ref": "#/entities/Wallet" },
+      "description": "Server-governed user wallet balance and reservation state."
+    },
+    "/walletLedger/{entryId}": {
+      "schema": { "$ref": "#/entities/WalletLedgerEntry" },
+      "description": "Immutable server-written credit/debit/reserve ledger entries."
+    },
+    "/withdrawalRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/WithdrawalRequest" },
+      "description": "Server-validated payout requests with reserved points and status lifecycle."
+    },
+    "/paymentMethods/{methodId}": {
+      "schema": { "$ref": "#/entities/PaymentMethod" },
+      "description": "Admin-controlled payout channels (bKash, Nagad, Rocket, Bank Transfer)."
+    },
+    "/withdrawalSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/WithdrawalSettings" },
+      "description": "Admin-controlled global withdrawal rules and daily/monthly caps."
+    },
+    "/adminLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminLog" },
+      "description": "Admin-only audit log for withdrawal approvals, rejections, payouts, and rule changes."
+    },
+    "/appSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Admin-controlled conversion rate, withdraw limits, and wallet/earning toggles."
+    },
+    "/referralCodes/{code}": {
+      "schema": { "$ref": "#/entities/ReferralCodeLookup" },
+      "description": "Non-PII referral code lookup."
+    },
+    "/referrals/{referredUid}": {
+      "schema": { "$ref": "#/entities/ReferralRecord" },
+      "description": "Referral attribution records."
+    },
+    "/referralRewards/{rewardId}": {
+      "schema": { "$ref": "#/entities/ReferralReward" },
+      "description": "Idempotent server-issued referral bonus credit ledger."
+    },
+    "/referralSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/ReferralSettings" },
+      "description": "Admin-controlled referral program settings and qualification rules."
+    },
+    "/referralLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ReferralLog" },
+      "description": "Immutable referral security, rejection, and reward audit logs."
+    },
+    "/referralLeaderboard/{uid}": {
+      "schema": { "$ref": "#/entities/ReferralLeaderboardEntry" },
+      "description": "Privacy-safe masked leaderboard summary for top referrers."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Admin role markers synchronized with Firebase Auth Custom Claims."
+    },
+    "/appConfig/{configId}": {
+      "schema": { "$ref": "#/entities/EconomyConfig" },
+      "description": "Admin-controlled economy & daily ad limit configuration."
+    },
+    "/advertisements/{adId}": {
+      "schema": { "$ref": "#/entities/Advertisement" },
+      "description": "Admin-controlled advertisement campaigns."
+    },
+    "/adSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/AdSession" },
+      "description": "Pending ad-watching sessions initiated by verified active users."
+    },
+    "/adCompletions/{completionId}": {
+      "schema": { "$ref": "#/entities/AdCompletion" },
+      "description": "Server-verified idempotent ad completion ledger."
+    },
+    "/dailyAdLimits/{limitId}": {
+      "schema": { "$ref": "#/entities/DailyAdLimit" },
+      "description": "Server-governed daily Asia/Dhaka ad limit counters."
+    },
+    "/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Immutable reward & payout transactions."
+    },
+    "/dailyBonuses/{userId}": {
+      "schema": { "$ref": "#/entities/DailyBonusState" },
+      "description": "Server-governed daily check-in streak state."
+    },
+    "/fraudLogs/{logId}": {
+      "schema": { "$ref": "#/entities/FraudLog" },
+      "description": "Admin/server-only suspicious activity and invalid callback audit logs."
+    },
+    "/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/UserNotification" },
+      "description": "User-scoped notifications."
+    },
+    "/failedTransactionLogs/{logId}": {
+      "schema": { "$ref": "#/entities/FailedTransactionLog" },
+      "description": "Immutable backend logs of failed/rejected financial operations."
+    },
+    "/reconciliationReports/{reportId}": {
+      "schema": { "$ref": "#/entities/ReconciliationReport" },
+      "description": "Immutable wallet vs ledger reconciliation discrepancy reports."
+    },
+    "/systemErrors/{errorId}": {
+      "schema": { "$ref": "#/entities/SystemError" },
+      "description": "Structured system error monitoring logs."
+    },
+    "/adminNotificationReads/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminNotificationReadState" },
+      "description": "Per-admin read notification tracking."
+    },
+    "/test/{docId}": {
+      "schema": { "$ref": "#/entities/ConnectionTest" },
+      "description": "Client Firestore connectivity check document."
+    },
+    "/adNetworks/{networkId}": {
+      "schema": { "$ref": "#/entities/AdNetwork" },
+      "description": "Public (non-secret) advertising network configurations and health status."
+    },
+    "/adNetworkSecrets/{networkId}": {
+      "schema": { "$ref": "#/entities/AdNetworkSecret" },
+      "description": "Server-only callback secrets and API credentials (strictly denied from clients)."
+    },
+    "/adPlacements/{placementId}": {
+      "schema": { "$ref": "#/entities/AdPlacement" },
+      "description": "Admin-managed ad placements and Direct Links with reward eligibility enforcement."
+    },
+    "/adCampaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/AdCampaign" },
+      "description": "Admin-governed ad campaigns with user and global daily caps."
+    },
+    "/adCallbacks/{callbackId}": {
+      "schema": { "$ref": "#/entities/AdCallback" },
+      "description": "Server-written S2S postback & replay-protection ledger."
+    },
+    "/adAnalytics/{analyticsId}": {
+      "schema": { "$ref": "#/entities/AdAnalytics" },
+      "description": "Per-network daily verified impressions, completions, and distributed rewards."
+    },
+    "/adNetworkLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AdNetworkLog" },
+      "description": "Immutable ad network configuration and callback security logs."
+    },
+    "/fraudReports/{reportId}": {
+      "schema": { "$ref": "#/entities/FraudReport" },
+      "description": "Risk-scored fraud monitoring queue reviewed by Admins."
+    },
+    "/securityAuditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/SecurityAuditLog" },
+      "description": "Immutable system-wide security audit trail."
+    },
+    "/rateLimits/{limitId}": {
+      "schema": { "$ref": "#/entities/RateLimitBucket" },
+      "description": "Server-only rate limiting buckets (no client access)."
+    },
+    "/directLinkAds/{linkId}": {
+      "schema": { "$ref": "#/entities/DirectLinkAd" },
+      "description": "Admin-managed Monetag/Advertising Direct Link placements across Home, Available Ads, Watch Ads, Daily Bonus, and Featured sections."
+    }
+  }
+}

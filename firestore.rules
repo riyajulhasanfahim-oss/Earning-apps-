@@ -1,0 +1,1233 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCode(code) {
+      return code is string && code.size() >= 3 && code.size() <= 30 && code.matches('^[A-Z0-9_]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function hasVerifiedClaimRole(roleName) {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        ('adminRole' in request.auth.token) &&
+        request.auth.token.adminRole == roleName;
+    }
+
+    function hasAdminDocRole(roleName) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        (
+          (
+            'role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == roleName
+          ) ||
+          (
+            roleName == 'admin' &&
+            !('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+          )
+        );
+    }
+
+    function isBootstrappedSuperAdmin() {
+      return isSignedIn() &&
+        ('email' in request.auth.token) &&
+        (
+          request.auth.token.email == 'riyajulhasanfahim@gmail.com' ||
+          request.auth.token.email == 'mitiu025@gmail.com'
+        ) &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isSuperAdmin() {
+      return isBootstrappedSuperAdmin() ||
+        hasVerifiedClaimRole('super_admin') ||
+        hasAdminDocRole('super_admin');
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() ||
+        hasVerifiedClaimRole('admin') ||
+        hasAdminDocRole('admin');
+    }
+
+    function isSupportAdmin() {
+      return isAdmin() ||
+        hasVerifiedClaimRole('support_admin') ||
+        hasAdminDocRole('support_admin');
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidUser(data) {
+      return data.keys().hasAll([
+          'uid', 'fullName', 'username', 'email', 'phoneNumber', 'profileImage',
+          'referralCode', 'referredBy', 'points', 'totalEarnings', 'totalAdViews',
+          'accountStatus', 'emailVerified', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'fullName', 'username', 'email', 'phoneNumber', 'profileImage',
+          'referralCode', 'referredBy', 'points', 'totalEarnings', 'totalAdViews',
+          'accountStatus', 'emailVerified', 'createdAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 80 &&
+        data.username is string && data.username.size() >= 3 && data.username.size() <= 30 && data.username.matches('^[a-zA-Z0-9_]+$') &&
+        data.email is string && data.email.size() >= 5 && data.email.size() <= 120 &&
+        data.phoneNumber is string && data.phoneNumber.size() <= 25 &&
+        data.profileImage is string && data.profileImage.size() <= 500 &&
+        isValidCode(data.referralCode) &&
+        data.referredBy is string && data.referredBy.size() <= 128 &&
+        data.points is number && data.points >= 0 &&
+        data.totalEarnings is number && data.totalEarnings >= 0 &&
+        data.totalAdViews is number && data.totalAdViews >= 0 &&
+        data.accountStatus in ['active', 'restricted', 'suspended', 'banned'] &&
+        data.emailVerified is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAppSettings(data) {
+      return data.keys().hasAll([
+          'walletEnabled', 'earningEnabled', 'dailyAdLimit', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'pointsPerBdt', 'minimumWithdrawPoints', 'maximumWithdrawAmountBdt',
+          'walletEnabled', 'earningEnabled', 'dailyBonusPoints', 'dailyAdLimit', 'updatedAt'
+        ]) &&
+        (!('pointsPerBdt' in data) || data.pointsPerBdt == null || (data.pointsPerBdt is number && data.pointsPerBdt > 0)) &&
+        (!('minimumWithdrawPoints' in data) || data.minimumWithdrawPoints == null || (data.minimumWithdrawPoints is number && data.minimumWithdrawPoints >= 1)) &&
+        (!('maximumWithdrawAmountBdt' in data) || data.maximumWithdrawAmountBdt == null || (data.maximumWithdrawAmountBdt is number && data.maximumWithdrawAmountBdt >= 1)) &&
+        (!('dailyBonusPoints' in data) || data.dailyBonusPoints == null || (data.dailyBonusPoints is number && data.dailyBonusPoints >= 1)) &&
+        data.walletEnabled is bool &&
+        data.earningEnabled is bool &&
+        data.dailyAdLimit is number && data.dailyAdLimit >= 1 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSiteSettings(data) {
+      return data.keys().hasAll(['websiteName', 'maintenanceMode', 'registrationEnabled', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'websiteName', 'websiteTitle', 'websiteLogoUrl', 'websiteFaviconUrl', 'loadingLogoUrl',
+          'websiteDescription', 'primaryColor', 'secondaryColor',
+          'loginBrandingTitle', 'loginBrandingSubtitle', 'headerBrandText', 'footerText',
+          'supportEmail', 'supportContact', 'maintenanceMode', 'registrationEnabled', 'updatedAt'
+        ]) &&
+        data.websiteName is string && data.websiteName.size() >= 2 && data.websiteName.size() <= 80 &&
+        (!('websiteTitle' in data) || (data.websiteTitle is string && data.websiteTitle.size() <= 120)) &&
+        (!('websiteLogoUrl' in data) || (data.websiteLogoUrl is string && data.websiteLogoUrl.size() <= 500)) &&
+        (!('websiteFaviconUrl' in data) || (data.websiteFaviconUrl is string && data.websiteFaviconUrl.size() <= 500)) &&
+        (!('loadingLogoUrl' in data) || (data.loadingLogoUrl is string && data.loadingLogoUrl.size() <= 500)) &&
+        (!('websiteDescription' in data) || (data.websiteDescription is string && data.websiteDescription.size() <= 400)) &&
+        (!('primaryColor' in data) || (data.primaryColor is string && data.primaryColor.matches('^#[0-9a-fA-F]{6}$'))) &&
+        (!('secondaryColor' in data) || (data.secondaryColor is string && data.secondaryColor.matches('^#[0-9a-fA-F]{6}$'))) &&
+        (!('loginBrandingTitle' in data) || (data.loginBrandingTitle is string && data.loginBrandingTitle.size() <= 100)) &&
+        (!('loginBrandingSubtitle' in data) || (data.loginBrandingSubtitle is string && data.loginBrandingSubtitle.size() <= 240)) &&
+        (!('headerBrandText' in data) || (data.headerBrandText is string && data.headerBrandText.size() <= 80)) &&
+        (!('footerText' in data) || (data.footerText is string && data.footerText.size() <= 200)) &&
+        (!('supportEmail' in data) || (data.supportEmail is string && data.supportEmail.size() <= 120)) &&
+        (!('supportContact' in data) || (data.supportContact is string && data.supportContact.size() <= 120)) &&
+        data.maintenanceMode is bool &&
+        data.registrationEnabled is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDailyBonusSettings(data) {
+      return data.keys().hasAll([
+          'enabled', 'monetagDirectLinkUrl', 'durationSeconds',
+          'incentivizedTrafficAllowed', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'enabled', 'monetagDirectLinkUrl', 'rewardPoints', 'durationSeconds',
+          'incentivizedTrafficAllowed', 'updatedAt'
+        ]) &&
+        data.enabled is bool &&
+        data.monetagDirectLinkUrl is string && data.monetagDirectLinkUrl.size() <= 1000 &&
+        (!('rewardPoints' in data) || data.rewardPoints == null || (data.rewardPoints is number && data.rewardPoints >= 1)) &&
+        data.durationSeconds is number && data.durationSeconds >= 30 && data.durationSeconds <= 180 &&
+        data.incentivizedTrafficAllowed is bool &&
+        (
+          !data.enabled ||
+          (
+            data.monetagDirectLinkUrl.matches('^https://.*') &&
+            ('rewardPoints' in data) && data.rewardPoints is number && data.rewardPoints >= 1 &&
+            data.incentivizedTrafficAllowed == true
+          )
+        ) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminNotificationReadState(data) {
+      return data.keys().hasAll(['adminUid', 'readIds', 'updatedAt']) &&
+        data.keys().hasOnly(['adminUid', 'readIds', 'updatedAt']) &&
+        isValidId(data.adminUid) &&
+        data.readIds is list && data.readIds.size() <= 300 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidEconomyConfig(data) {
+      return data.keys().hasAll(['updatedAt']) &&
+        data.keys().hasOnly([
+          'pointsPerBdt', 'dailyBonusPoints', 'minimumWithdrawPoints', 'dailyAdLimit', 'updatedAt'
+        ]) &&
+        (!('pointsPerBdt' in data) || data.pointsPerBdt == null || (data.pointsPerBdt is number && data.pointsPerBdt > 0)) &&
+        (!('dailyBonusPoints' in data) || data.dailyBonusPoints == null || (data.dailyBonusPoints is number && data.dailyBonusPoints >= 1)) &&
+        (!('minimumWithdrawPoints' in data) || data.minimumWithdrawPoints == null || (data.minimumWithdrawPoints is number && data.minimumWithdrawPoints >= 1)) &&
+        (!('dailyAdLimit' in data) || (data.dailyAdLimit is number && data.dailyAdLimit >= 1)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidReferralCodeLookup(data) {
+      return data.keys().hasAll(['code', 'ownerUid', 'username', 'active', 'createdAt']) &&
+        data.keys().hasOnly(['code', 'ownerUid', 'username', 'active', 'createdAt']) &&
+        isValidCode(data.code) &&
+        isValidId(data.ownerUid) &&
+        data.username is string && data.username.size() >= 3 && data.username.size() <= 30 && data.username.matches('^[a-zA-Z0-9_]+$') &&
+        data.active is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidReferralRecord(data) {
+      return data.keys().hasAll([
+          'referralId', 'referrerUid', 'referredUid', 'referredName', 'referredUsername',
+          'referralCodeUsed', 'qualificationStatus', 'rewardStatus', 'rewardPoints',
+          'bonusEarnedPoints', 'newUserBonusPoints', 'rejectionReason', 'status', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'referralId', 'referrerUid', 'referredUid', 'referredName', 'referredUsername',
+          'referralCodeUsed', 'qualificationStatus', 'rewardStatus', 'rewardPoints',
+          'bonusEarnedPoints', 'newUserBonusPoints', 'rejectionReason', 'status',
+          'createdAt', 'qualifiedAt', 'rewardedAt'
+        ]) &&
+        isValidId(data.referralId) &&
+        isValidId(data.referrerUid) &&
+        isValidId(data.referredUid) &&
+        data.referredName is string && data.referredName.size() >= 2 && data.referredName.size() <= 80 &&
+        data.referredUsername is string && data.referredUsername.size() >= 3 && data.referredUsername.size() <= 30 && data.referredUsername.matches('^[a-zA-Z0-9_]+$') &&
+        isValidCode(data.referralCodeUsed) &&
+        data.qualificationStatus in ['registered', 'pending', 'qualified', 'rewarded', 'rejected'] &&
+        data.rewardStatus in ['pending', 'credited', 'rejected'] &&
+        data.rewardPoints is number && data.rewardPoints >= 0 &&
+        data.bonusEarnedPoints is number && data.bonusEarnedPoints >= 0 &&
+        data.newUserBonusPoints is number && data.newUserBonusPoints >= 0 &&
+        data.rejectionReason is string && data.rejectionReason.size() <= 300 &&
+        data.status in ['active', 'inactive'] &&
+        data.createdAt is timestamp &&
+        (!('qualifiedAt' in data) || data.qualifiedAt == null || data.qualifiedAt is timestamp) &&
+        (!('rewardedAt' in data) || data.rewardedAt == null || data.rewardedAt is timestamp);
+    }
+
+    function isValidReferralSettings(data) {
+      return data.keys().hasAll([
+          'referralEnabled', 'minimumQualificationAds', 'requireEmailVerified',
+          'requireActiveAccount', 'dailyReferralCap', 'referralRulesText', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'referralEnabled', 'referrerBonusPoints', 'newUserBonusPoints',
+          'minimumQualificationAds', 'requireEmailVerified', 'requireActiveAccount',
+          'maxReferralsPerUser', 'dailyReferralCap', 'referralRulesText', 'updatedAt'
+        ]) &&
+        data.referralEnabled is bool &&
+        (!('referrerBonusPoints' in data) || data.referrerBonusPoints == null || (data.referrerBonusPoints is number && data.referrerBonusPoints >= 0)) &&
+        (!('newUserBonusPoints' in data) || data.newUserBonusPoints == null || (data.newUserBonusPoints is number && data.newUserBonusPoints >= 0)) &&
+        data.minimumQualificationAds is number && data.minimumQualificationAds >= 0 && data.minimumQualificationAds <= 1000 &&
+        data.requireEmailVerified is bool &&
+        data.requireActiveAccount is bool &&
+        (!('maxReferralsPerUser' in data) || data.maxReferralsPerUser == null || (data.maxReferralsPerUser is number && data.maxReferralsPerUser >= 1)) &&
+        data.dailyReferralCap is number && data.dailyReferralCap >= 1 && data.dailyReferralCap <= 1000 &&
+        data.referralRulesText is string && data.referralRulesText.size() <= 600 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidReferralLog(data) {
+      return data.keys().hasAll(['logId', 'eventType', 'severity', 'details', 'createdAt']) &&
+        data.keys().hasOnly(['logId', 'referrerUid', 'referredUid', 'eventType', 'severity', 'details', 'createdAt']) &&
+        isValidId(data.logId) &&
+        (!('referrerUid' in data) || (data.referrerUid is string && data.referrerUid.size() <= 128)) &&
+        (!('referredUid' in data) || (data.referredUid is string && data.referredUid.size() <= 128)) &&
+        data.eventType is string && data.eventType.size() >= 2 && data.eventType.size() <= 80 &&
+        data.severity in ['low', 'medium', 'high'] &&
+        data.details is string && data.details.size() <= 500 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidReferralLeaderboard(data) {
+      return data.keys().hasAll(['uid', 'publicUsername', 'totalQualifiedReferrals', 'totalReferralRewards', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'publicUsername', 'totalQualifiedReferrals', 'totalReferralRewards', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.publicUsername is string && data.publicUsername.size() >= 2 && data.publicUsername.size() <= 40 &&
+        data.totalQualifiedReferrals is number && data.totalQualifiedReferrals >= 0 &&
+        data.totalReferralRewards is number && data.totalReferralRewards >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdvertisement(data) {
+      return data.keys().hasAll([
+          'adId', 'adName', 'adNetwork', 'adType', 'placementOrUrl',
+          'rewardPoints', 'dailyLimit', 'estimatedDuration',
+          'startDate', 'endDate', 'status', 'allowedCountries',
+          'rewardVerificationMethod', 'incentivizedTrafficAllowed', 'description',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'adId', 'adName', 'adNetwork', 'adType', 'placementOrUrl',
+          'rewardPoints', 'dailyLimit', 'estimatedDuration',
+          'startDate', 'endDate', 'status', 'allowedCountries',
+          'rewardVerificationMethod', 'incentivizedTrafficAllowed', 'description',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.adId) &&
+        data.adName is string && data.adName.size() >= 2 && data.adName.size() <= 100 &&
+        data.adNetwork is string && data.adNetwork.size() >= 2 && data.adNetwork.size() <= 60 &&
+        data.adType in ['rewarded', 'direct_link', 'other'] &&
+        data.placementOrUrl is string && data.placementOrUrl.size() >= 2 && data.placementOrUrl.size() <= 500 &&
+        data.rewardPoints is number && data.rewardPoints >= 0 &&
+        data.dailyLimit is number && data.dailyLimit >= 1 &&
+        data.estimatedDuration is number && data.estimatedDuration >= 1 &&
+        data.startDate is string && data.startDate.size() <= 20 &&
+        data.endDate is string && data.endDate.size() <= 20 &&
+        data.status in ['active', 'inactive'] &&
+        data.allowedCountries is string && data.allowedCountries.size() <= 200 &&
+        data.rewardVerificationMethod in ['s2s_postback', 'sdk_callback', 'none'] &&
+        data.incentivizedTrafficAllowed is bool &&
+        data.description is string && data.description.size() <= 300 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdSession(data) {
+      return data.keys().hasAll([
+          'sessionId', 'userId', 'adId', 'adName', 'adNetwork',
+          'expectedRewardPoints', 'dhakaDate', 'status',
+          'transactionId', 'rejectionReason', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'sessionId', 'userId', 'adId', 'adName', 'adNetwork',
+          'expectedRewardPoints', 'dhakaDate', 'status',
+          'transactionId', 'rejectionReason', 'createdAt'
+        ]) &&
+        isValidId(data.sessionId) &&
+        isValidId(data.userId) &&
+        isValidId(data.adId) &&
+        data.adName is string && data.adName.size() >= 2 && data.adName.size() <= 100 &&
+        data.adNetwork is string && data.adNetwork.size() >= 2 && data.adNetwork.size() <= 60 &&
+        data.expectedRewardPoints is number && data.expectedRewardPoints >= 0 &&
+        data.dhakaDate is string && data.dhakaDate.size() == 10 && data.dhakaDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        data.status in ['pending', 'completed', 'rejected'] &&
+        data.transactionId is string && data.transactionId.size() <= 128 &&
+        data.rejectionReason is string && data.rejectionReason.size() <= 200 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'message', 'read', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'title', 'message', 'read', 'createdAt']) &&
+        isValidId(data.userId) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+        data.message is string && data.message.size() >= 2 && data.message.size() <= 300 &&
+        data.read is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPaymentMethod(data) {
+      return data.keys().hasAll([
+          'methodId', 'name', 'enabled', 'feePercent', 'processingWindow', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'methodId', 'name', 'bengaliName', 'enabled', 'minPoints',
+          'feePercent', 'processingWindow', 'allowedAccountTypes', 'updatedAt'
+        ]) &&
+        data.methodId in ['bkash', 'nagad', 'rocket', 'bank'] &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 50 &&
+        (!('bengaliName' in data) || (data.bengaliName is string && data.bengaliName.size() <= 50)) &&
+        data.enabled is bool &&
+        (!('minPoints' in data) || data.minPoints == null || (data.minPoints is number && data.minPoints >= 1)) &&
+        data.feePercent is number && data.feePercent >= 0 && data.feePercent <= 50 &&
+        data.processingWindow is string && data.processingWindow.size() >= 2 && data.processingWindow.size() <= 120 &&
+        (!('allowedAccountTypes' in data) || data.allowedAccountTypes is list) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWithdrawalSettings(data) {
+      return data.keys().hasAll(['withdrawalEnabled', 'dailyLimitCount', 'processingTimeLabel', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'withdrawalEnabled', 'minimumWithdrawPoints', 'maximumWithdrawBdt',
+          'defaultFeePercent', 'dailyLimitBdt', 'dailyLimitCount', 'monthlyLimitBdt',
+          'processingTimeLabel', 'allowedMethods', 'updatedAt'
+        ]) &&
+        data.withdrawalEnabled is bool &&
+        (!('minimumWithdrawPoints' in data) || data.minimumWithdrawPoints == null || (data.minimumWithdrawPoints is number && data.minimumWithdrawPoints >= 1)) &&
+        (!('maximumWithdrawBdt' in data) || data.maximumWithdrawBdt == null || (data.maximumWithdrawBdt is number && data.maximumWithdrawBdt >= 1)) &&
+        (!('defaultFeePercent' in data) || (data.defaultFeePercent is number && data.defaultFeePercent >= 0 && data.defaultFeePercent <= 50)) &&
+        (!('dailyLimitBdt' in data) || data.dailyLimitBdt == null || (data.dailyLimitBdt is number && data.dailyLimitBdt >= 1)) &&
+        data.dailyLimitCount is number && data.dailyLimitCount >= 1 && data.dailyLimitCount <= 100 &&
+        (!('monthlyLimitBdt' in data) || data.monthlyLimitBdt == null || (data.monthlyLimitBdt is number && data.monthlyLimitBdt >= 1)) &&
+        data.processingTimeLabel is string && data.processingTimeLabel.size() >= 2 && data.processingTimeLabel.size() <= 120 &&
+        (!('allowedMethods' in data) || data.allowedMethods is list) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminLog(data) {
+      return data.keys().hasAll(['logId', 'adminUid', 'adminEmail', 'action', 'targetId', 'details', 'createdAt']) &&
+        data.keys().hasOnly([
+          'logId', 'adminUid', 'adminEmail', 'adminRole', 'action', 'targetId',
+          'previousValue', 'newValue', 'metadata', 'details', 'createdAt'
+        ]) &&
+        isValidId(data.logId) &&
+        isValidId(data.adminUid) &&
+        data.adminEmail is string && data.adminEmail.size() >= 3 && data.adminEmail.size() <= 120 &&
+        (!('adminRole' in data) || data.adminRole in ['super_admin', 'admin', 'support_admin']) &&
+        data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+        data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+        (!('previousValue' in data) || (data.previousValue is string && data.previousValue.size() <= 500)) &&
+        (!('newValue' in data) || (data.newValue is string && data.newValue.size() <= 500)) &&
+        (!('metadata' in data) || (data.metadata is string && data.metadata.size() <= 500)) &&
+        data.details is string && data.details.size() <= 500 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidFailedTransactionLog(data) {
+      return data.keys().hasAll(['logId', 'userId', 'operation', 'errorCode', 'details', 'createdAt']) &&
+        data.keys().hasOnly(['logId', 'userId', 'operation', 'errorCode', 'transactionId', 'details', 'createdAt']) &&
+        isValidId(data.logId) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.operation is string && data.operation.size() >= 2 && data.operation.size() <= 80 &&
+        data.errorCode is string && data.errorCode.size() >= 2 && data.errorCode.size() <= 100 &&
+        (!('transactionId' in data) || (data.transactionId is string && data.transactionId.size() <= 128)) &&
+        data.details is string && data.details.size() <= 500 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidReconciliationReport(data) {
+      return data.keys().hasAll([
+          'reportId', 'userId', 'walletTotalPoints', 'walletReservedPoints',
+          'ledgerNetPoints', 'ledgerReservedPoints', 'discrepancyPoints', 'status', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'reportId', 'userId', 'walletTotalPoints', 'walletReservedPoints',
+          'ledgerNetPoints', 'ledgerReservedPoints', 'discrepancyPoints', 'status', 'details', 'createdAt'
+        ]) &&
+        isValidId(data.reportId) &&
+        isValidId(data.userId) &&
+        data.walletTotalPoints is number &&
+        data.walletReservedPoints is number &&
+        data.ledgerNetPoints is number &&
+        data.ledgerReservedPoints is number &&
+        data.discrepancyPoints is number &&
+        data.status in ['matched', 'mismatch_detected', 'resolved'] &&
+        (!('details' in data) || (data.details is string && data.details.size() <= 500)) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSystemError(data) {
+      return data.keys().hasAll(['errorId', 'userId', 'source', 'operation', 'message', 'severity', 'createdAt']) &&
+        data.keys().hasOnly(['errorId', 'userId', 'source', 'operation', 'message', 'severity', 'createdAt']) &&
+        isValidId(data.errorId) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.source in ['client', 'cloud_function', 'app_check', 'firestore'] &&
+        data.operation is string && data.operation.size() >= 2 && data.operation.size() <= 100 &&
+        data.message is string && data.message.size() >= 2 && data.message.size() <= 500 &&
+        data.severity in ['low', 'medium', 'high', 'critical'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAdNetwork(data) {
+      return data.keys().hasAll([
+          'networkId', 'networkName', 'logoKey', 'integrationType',
+          'incentivizedTrafficAllowed', 'rewardVerificationSupported',
+          'rewardEnabled', 'clicksSupported', 'secretConfigured',
+          'healthStatus', 'enabled', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'networkId', 'networkName', 'logoKey', 'integrationType',
+          'publisherId', 'websiteId', 'placementId', 'directLinkUrl',
+          'apiBaseUrl', 'callbackUrl', 'postbackParamsTemplate',
+          'incentivizedTrafficAllowed', 'rewardVerificationSupported',
+          'rewardEnabled', 'clicksSupported', 'apiHealthSupported',
+          'secretConfigured', 'secretHint', 'healthStatus', 'healthMessage',
+          'enabled', 'lastTestedAt', 'updatedAt'
+        ]) &&
+        isValidId(data.networkId) &&
+        data.networkName is string && data.networkName.size() >= 2 && data.networkName.size() <= 80 &&
+        data.logoKey in ['monetag', 'applixir', 'adsterra', 'custom'] &&
+        data.integrationType in ['s2s_postback', 'sdk_callback', 'direct_link', 'hybrid'] &&
+        (!('publisherId' in data) || (data.publisherId is string && data.publisherId.size() <= 120)) &&
+        (!('websiteId' in data) || (data.websiteId is string && data.websiteId.size() <= 120)) &&
+        (!('placementId' in data) || (data.placementId is string && data.placementId.size() <= 120)) &&
+        (!('directLinkUrl' in data) || (data.directLinkUrl is string && data.directLinkUrl.size() <= 500)) &&
+        (!('apiBaseUrl' in data) || (data.apiBaseUrl is string && data.apiBaseUrl.size() <= 300)) &&
+        (!('callbackUrl' in data) || (data.callbackUrl is string && data.callbackUrl.size() <= 500)) &&
+        (!('postbackParamsTemplate' in data) || (data.postbackParamsTemplate is string && data.postbackParamsTemplate.size() <= 400)) &&
+        data.incentivizedTrafficAllowed is bool &&
+        data.rewardVerificationSupported is bool &&
+        data.rewardEnabled is bool &&
+        data.clicksSupported is bool &&
+        (!('apiHealthSupported' in data) || data.apiHealthSupported is bool) &&
+        data.secretConfigured is bool &&
+        (!('secretHint' in data) || (data.secretHint is string && data.secretHint.size() <= 24)) &&
+        data.healthStatus in ['connected', 'configuration_required', 'verification_pending', 'error', 'disabled'] &&
+        (!('healthMessage' in data) || (data.healthMessage is string && data.healthMessage.size() <= 300)) &&
+        data.enabled is bool &&
+        (!('lastTestedAt' in data) || (data.lastTestedAt is string && data.lastTestedAt.size() <= 60)) &&
+        data.updatedAt is timestamp &&
+        (!data.rewardEnabled || (data.incentivizedTrafficAllowed == true && data.rewardVerificationSupported == true));
+    }
+
+    function isValidAdPlacement(data) {
+      return data.keys().hasAll([
+          'placementId', 'networkId', 'networkName', 'placementName',
+          'adType', 'status', 'incentivizedTrafficApproved', 'rewardEligible', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'placementId', 'networkId', 'networkName', 'placementName',
+          'placementCategory', 'adType', 'destinationUrl', 'zoneOrPlacementCode',
+          'startDate', 'endDate', 'status', 'incentivizedTrafficApproved',
+          'rewardEligible', 'linkedAdId', 'updatedAt'
+        ]) &&
+        isValidId(data.placementId) &&
+        isValidId(data.networkId) &&
+        data.networkName is string && data.networkName.size() >= 2 && data.networkName.size() <= 80 &&
+        data.placementName is string && data.placementName.size() >= 2 && data.placementName.size() <= 100 &&
+        (!('placementCategory' in data) || (data.placementCategory is string && data.placementCategory.size() <= 60)) &&
+        data.adType in ['rewarded', 'direct_link', 'other'] &&
+        (!('destinationUrl' in data) || (data.destinationUrl is string && data.destinationUrl.size() <= 500)) &&
+        (!('zoneOrPlacementCode' in data) || (data.zoneOrPlacementCode is string && data.zoneOrPlacementCode.size() <= 120)) &&
+        (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 20)) &&
+        (!('endDate' in data) || (data.endDate is string && data.endDate.size() <= 20)) &&
+        data.status in ['active', 'inactive'] &&
+        data.incentivizedTrafficApproved is bool &&
+        data.rewardEligible is bool &&
+        (!('linkedAdId' in data) || (data.linkedAdId is string && data.linkedAdId.size() <= 80)) &&
+        data.updatedAt is timestamp &&
+        (data.adType != 'direct_link' || !data.rewardEligible || data.incentivizedTrafficApproved == true);
+    }
+
+    function isValidAdCampaign(data) {
+      return data.keys().hasAll([
+          'campaignId', 'campaignName', 'networkId', 'networkName', 'campaignType',
+          'rewardPoints', 'dailyUserLimit', 'globalDailyLimit',
+          'rewardVerificationMethod', 'incentivizedTrafficAllowed',
+          'rewardEligible', 'status', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'campaignId', 'campaignName', 'networkId', 'networkName', 'placementId',
+          'campaignType', 'rewardPoints', 'dailyUserLimit', 'globalDailyLimit',
+          'globalCompletedToday', 'globalCompletedDhakaDate', 'estimatedDuration',
+          'startDate', 'endDate', 'targetCountries', 'rewardVerificationMethod',
+          'incentivizedTrafficAllowed', 'rewardEligible', 'status', 'linkedAdId', 'updatedAt'
+        ]) &&
+        isValidId(data.campaignId) &&
+        data.campaignName is string && data.campaignName.size() >= 2 && data.campaignName.size() <= 100 &&
+        isValidId(data.networkId) &&
+        data.networkName is string && data.networkName.size() >= 2 && data.networkName.size() <= 80 &&
+        (!('placementId' in data) || (data.placementId is string && data.placementId.size() <= 80)) &&
+        data.campaignType in ['rewarded', 'direct_link', 'other'] &&
+        data.rewardPoints is number && data.rewardPoints >= 0 && data.rewardPoints <= 10000 &&
+        data.dailyUserLimit is number && data.dailyUserLimit >= 1 && data.dailyUserLimit <= 500 &&
+        data.globalDailyLimit is number && data.globalDailyLimit >= 1 && data.globalDailyLimit <= 1000000 &&
+        (!('globalCompletedToday' in data) || (data.globalCompletedToday is number && data.globalCompletedToday >= 0)) &&
+        (!('globalCompletedDhakaDate' in data) || (data.globalCompletedDhakaDate is string && data.globalCompletedDhakaDate.size() <= 20)) &&
+        (!('estimatedDuration' in data) || (data.estimatedDuration is number && data.estimatedDuration >= 1 && data.estimatedDuration <= 300)) &&
+        (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 20)) &&
+        (!('endDate' in data) || (data.endDate is string && data.endDate.size() <= 20)) &&
+        (!('targetCountries' in data) || (data.targetCountries is string && data.targetCountries.size() <= 120)) &&
+        data.rewardVerificationMethod in ['s2s_postback', 'sdk_callback', 'none'] &&
+        data.incentivizedTrafficAllowed is bool &&
+        data.rewardEligible is bool &&
+        data.status in ['active', 'inactive'] &&
+        (!('linkedAdId' in data) || (data.linkedAdId is string && data.linkedAdId.size() <= 80)) &&
+        data.updatedAt is timestamp &&
+        (
+          data.rewardPoints == 0 ||
+          (
+            data.rewardEligible == true &&
+            data.incentivizedTrafficAllowed == true &&
+            data.rewardVerificationMethod != 'none'
+          )
+        );
+    }
+
+    function isValidAdAnalytics(data) {
+      return data.keys().hasAll([
+          'analyticsId', 'networkId', 'networkName', 'dhakaDate',
+          'impressions', 'clicksSupported', 'verifiedCompletions',
+          'rejectedCompletions', 'totalRewardsDistributed', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'analyticsId', 'networkId', 'networkName', 'dhakaDate',
+          'impressions', 'clicks', 'clicksSupported', 'verifiedCompletions',
+          'rejectedCompletions', 'totalRewardsDistributed', 'updatedAt'
+        ]) &&
+        isValidId(data.analyticsId) &&
+        isValidId(data.networkId) &&
+        data.networkName is string && data.networkName.size() >= 2 && data.networkName.size() <= 80 &&
+        data.dhakaDate is string && data.dhakaDate.size() <= 20 &&
+        data.impressions is number && data.impressions >= 0 &&
+        (!('clicks' in data) || data.clicks == null || (data.clicks is number && data.clicks >= 0)) &&
+        data.clicksSupported is bool &&
+        data.verifiedCompletions is number && data.verifiedCompletions >= 0 &&
+        data.rejectedCompletions is number && data.rejectedCompletions >= 0 &&
+        data.totalRewardsDistributed is number && data.totalRewardsDistributed >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDirectLinkAd(data) {
+      return data.keys().hasAll([
+          'linkId', 'title', 'url', 'adNetwork', 'placement',
+          'rewardPoints', 'estimatedDuration', 'dailyLimit',
+          'status', 'incentivizedTrafficAllowed', 'rewardVerificationMethod',
+          'sortOrder', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'linkId', 'title', 'url', 'adNetwork', 'placement',
+          'rewardPoints', 'estimatedDuration', 'dailyLimit',
+          'status', 'incentivizedTrafficAllowed', 'rewardVerificationMethod',
+          'sortOrder', 'notes', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.linkId) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+        data.url is string && data.url.size() >= 10 && data.url.size() <= 500 &&
+        data.url.matches('^https://.*') &&
+        data.adNetwork is string && data.adNetwork.size() >= 2 && data.adNetwork.size() <= 60 &&
+        data.placement in ['home_page', 'available_ads', 'watch_ads', 'daily_bonus', 'featured_section'] &&
+        data.rewardPoints is number && data.rewardPoints >= 0 && data.rewardPoints <= 10000 &&
+        data.estimatedDuration is number && data.estimatedDuration >= 30 && data.estimatedDuration <= 180 &&
+        data.dailyLimit is number && data.dailyLimit >= 1 && data.dailyLimit <= 500 &&
+        data.status in ['active', 'inactive'] &&
+        data.incentivizedTrafficAllowed is bool &&
+        data.rewardVerificationMethod in ['s2s_postback', 'sdk_callback', 'none'] &&
+        data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 300)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (
+          data.rewardPoints == 0 ||
+          (
+            data.incentivizedTrafficAllowed == true &&
+            data.rewardVerificationMethod != 'none'
+          )
+        );
+    }
+
+    function isValidAdNetworkLog(data) {
+      return data.keys().hasAll(['logId', 'networkId', 'eventType', 'severity', 'details', 'createdAt']) &&
+        data.keys().hasOnly([
+          'logId', 'networkId', 'actorUid', 'actorEmail',
+          'eventType', 'severity', 'status', 'details', 'createdAt'
+        ]) &&
+        isValidId(data.logId) &&
+        data.networkId is string && data.networkId.size() <= 64 &&
+        (!('actorUid' in data) || (data.actorUid is string && data.actorUid.size() <= 128)) &&
+        (!('actorEmail' in data) || (data.actorEmail is string && data.actorEmail.size() <= 120)) &&
+        data.eventType is string && data.eventType.size() >= 2 && data.eventType.size() <= 80 &&
+        data.severity in ['info', 'warning', 'error'] &&
+        (!('status' in data) || (data.status is string && data.status.size() <= 40)) &&
+        data.details is string && data.details.size() <= 500 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidFraudReport(data) {
+      return data.keys().hasAll([
+          'reportId', 'category', 'riskLevel', 'riskScore', 'reviewStatus',
+          'userId', 'title', 'details', 'signals', 'falsePositiveProtected',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'reportId', 'category', 'riskLevel', 'riskScore', 'reviewStatus',
+          'userId', 'userEmail', 'userName', 'title', 'details', 'signals',
+          'relatedTxId', 'actionTaken', 'reviewedBy', 'reviewedEmail',
+          'resolutionNote', 'falsePositiveProtected', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.reportId) &&
+        data.category in ['multi_account', 'ad_reward', 'referral', 'withdrawal', 'auth_security'] &&
+        data.riskLevel in ['low', 'medium', 'high'] &&
+        data.riskScore is number && data.riskScore >= 0 && data.riskScore <= 100 &&
+        data.reviewStatus in ['pending_review', 'reviewed', 'verification_requested', 'restricted', 'suspended', 'restored'] &&
+        data.userId is string && data.userId.size() <= 128 &&
+        (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 120)) &&
+        (!('userName' in data) || (data.userName is string && data.userName.size() <= 80)) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+        data.details is string && data.details.size() <= 600 &&
+        data.signals is list && data.signals.size() <= 20 &&
+        (!('relatedTxId' in data) || (data.relatedTxId is string && data.relatedTxId.size() <= 128)) &&
+        (!('actionTaken' in data) || (data.actionTaken is string && data.actionTaken.size() <= 120)) &&
+        (!('reviewedBy' in data) || (data.reviewedBy is string && data.reviewedBy.size() <= 128)) &&
+        (!('reviewedEmail' in data) || (data.reviewedEmail is string && data.reviewedEmail.size() <= 120)) &&
+        (!('resolutionNote' in data) || (data.resolutionNote is string && data.resolutionNote.size() <= 400)) &&
+        data.falsePositiveProtected is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSecurityAuditLog(data) {
+      return data.keys().hasAll([
+          'logId', 'userId', 'eventType', 'category', 'severity', 'details', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'logId', 'userId', 'eventType', 'category', 'severity',
+          'transactionId', 'riskScore', 'details', 'metadata', 'createdAt'
+        ]) &&
+        isValidId(data.logId) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.eventType is string && data.eventType.size() >= 2 && data.eventType.size() <= 80 &&
+        data.category in ['auth', 'wallet', 'ad_reward', 'withdrawal', 'referral', 'admin', 'account_restriction', 'security'] &&
+        data.severity in ['info', 'low', 'medium', 'high', 'critical'] &&
+        (!('transactionId' in data) || (data.transactionId is string && data.transactionId.size() <= 128)) &&
+        (!('riskScore' in data) || data.riskScore == null || (data.riskScore is number && data.riskScore >= 0 && data.riskScore <= 100)) &&
+        data.details is string && data.details.size() <= 500 &&
+        (!('metadata' in data) || (data.metadata is string && data.metadata.size() <= 400)) &&
+        data.createdAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isSupportAdmin());
+      allow list: if isSupportAdmin();
+
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().email == request.auth.token.email &&
+        incoming().points == 0 &&
+        incoming().totalEarnings == 0 &&
+        incoming().totalAdViews == 0 &&
+        incoming().accountStatus == 'active' &&
+        (incoming().emailVerified == false || (isEmailVerified() && incoming().emailVerified == true)) &&
+        incoming().createdAt == request.time &&
+        (
+          incoming().referredBy == '' ||
+          (
+            isValidId(incoming().referredBy) &&
+            incoming().referredBy != request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(incoming().referredBy))
+          )
+        );
+
+      allow update: if isValidId(userId) &&
+        isSignedIn() &&
+        isValidUser(incoming()) && (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            existing().accountStatus == 'active' &&
+            incoming().uid == existing().uid &&
+            incoming().username == existing().username &&
+            incoming().email == existing().email &&
+            incoming().referralCode == existing().referralCode &&
+            incoming().referredBy == existing().referredBy &&
+            incoming().points == existing().points &&
+            incoming().totalEarnings == existing().totalEarnings &&
+            incoming().totalAdViews == existing().totalAdViews &&
+            incoming().accountStatus == existing().accountStatus &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'profileImage', 'emailVerified']) &&
+            (
+              incoming().emailVerified == existing().emailVerified ||
+              (isEmailVerified() && incoming().emailVerified == true)
+            ) &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['emailVerified']) ||
+              isEmailVerified()
+            )
+          )
+        );
+
+      allow delete: if isValidId(userId) && isSuperAdmin();
+    }
+
+    // 2. Wallets Collection (Strictly server/admin governed; owner & support read-only)
+    match /wallets/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isSupportAdmin());
+      allow list: if isSupportAdmin();
+      allow create, update, delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 3. Immutable Wallet Ledger (Strictly server/admin written; owner & support read-only)
+    match /walletLedger/{entryId} {
+      allow get: if isValidId(entryId) && isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow create, update, delete: if isValidId(entryId) && isAdmin();
+    }
+
+    // 4. Withdrawal Requests (Server-validated reservation; owner & support read-only)
+    match /withdrawalRequests/{requestId} {
+      allow get: if isValidId(requestId) && isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow create, update, delete: if isValidId(requestId) && isAdmin();
+    }
+
+    // 4b. Admin-Controlled Payment Methods (bKash, Nagad, Rocket, Bank Transfer)
+    match /paymentMethods/{methodId} {
+      allow get: if isValidId(methodId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(methodId) && isAdmin() && isValidPaymentMethod(incoming()) && incoming().methodId == methodId && incoming().updatedAt == request.time;
+      allow update: if isValidId(methodId) && isAdmin() && isValidPaymentMethod(incoming()) && incoming().methodId == existing().methodId && incoming().updatedAt == request.time;
+      allow delete: if isValidId(methodId) && isAdmin();
+    }
+
+    // 4c. Admin-Controlled Withdrawal Rules & Daily/Monthly Caps
+    match /withdrawalSettings/{settingId} {
+      allow get: if isValidId(settingId) && isSignedIn() && (settingId == 'config' || isSupportAdmin());
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(settingId) && isAdmin() && isValidWithdrawalSettings(incoming()) && incoming().updatedAt == request.time;
+      allow update: if isValidId(settingId) && isAdmin() && isValidWithdrawalSettings(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(settingId) && isAdmin();
+    }
+
+    // 4d. Immutable Admin Audit Logs (Support/Admin read-only; immutable)
+    match /adminLogs/{logId} {
+      allow get: if isValidId(logId) && isSupportAdmin();
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(logId) && isAdmin() && isValidAdminLog(incoming()) && incoming().logId == logId && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 5. Admin-Controlled App & Site Settings
+    match /appSettings/{settingId} {
+      allow get: if isValidId(settingId) && (settingId == 'site' || (isSignedIn() && (settingId == 'wallet' || settingId == 'dailyBonus' || isSupportAdmin())));
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(settingId) && incoming().updatedAt == request.time && (
+        (settingId == 'site' && isSuperAdmin() && isValidSiteSettings(incoming())) ||
+        (settingId == 'dailyBonus' && isAdmin() && isValidDailyBonusSettings(incoming())) ||
+        (settingId != 'site' && settingId != 'dailyBonus' && isAdmin() && isValidAppSettings(incoming()))
+      );
+      allow update: if isValidId(settingId) && incoming().updatedAt == request.time && (
+        (settingId == 'site' && isSuperAdmin() && isValidSiteSettings(incoming())) ||
+        (settingId == 'dailyBonus' && isAdmin() && isValidDailyBonusSettings(incoming())) ||
+        (settingId != 'site' && settingId != 'dailyBonus' && isAdmin() && isValidAppSettings(incoming()))
+      );
+      allow delete: if isValidId(settingId) && isSuperAdmin();
+    }
+
+    // 6. Referral Code Lookup Index
+    match /referralCodes/{code} {
+      allow get: if isValidCode(code);
+      allow list: if isAdmin();
+
+      allow create: if isValidCode(code) &&
+        isSignedIn() &&
+        isValidReferralCodeLookup(incoming()) &&
+        incoming().code == code &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().active == true &&
+        incoming().createdAt == request.time &&
+        existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update, delete: if isValidCode(code) && isAdmin();
+    }
+
+    // 7. Referrals Attribution & Qualification Collection
+    match /referrals/{referredUid} {
+      allow get: if isValidId(referredUid) &&
+        isSignedIn() &&
+        (existing().referrerUid == request.auth.uid || existing().referredUid == request.auth.uid || isSupportAdmin());
+
+      allow list: if isSignedIn() && (existing().referrerUid == request.auth.uid || isSupportAdmin());
+
+      allow create: if isValidId(referredUid) &&
+        isOwner(referredUid) &&
+        isValidReferralRecord(incoming()) &&
+        incoming().referralId == referredUid &&
+        incoming().referredUid == request.auth.uid &&
+        incoming().referrerUid != request.auth.uid &&
+        incoming().qualificationStatus in ['registered', 'pending'] &&
+        incoming().rewardStatus == 'pending' &&
+        incoming().rewardPoints == 0 &&
+        incoming().bonusEarnedPoints == 0 &&
+        incoming().newUserBonusPoints == 0 &&
+        incoming().rejectionReason == '' &&
+        incoming().status == 'active' &&
+        incoming().createdAt == request.time &&
+        !('qualifiedAt' in incoming()) &&
+        !('rewardedAt' in incoming()) &&
+        exists(/databases/$(database)/documents/referralCodes/$(incoming().referralCodeUsed)) &&
+        get(/databases/$(database)/documents/referralCodes/$(incoming().referralCodeUsed)).data.ownerUid == incoming().referrerUid &&
+        existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update, delete: if isValidId(referredUid) && isAdmin();
+    }
+
+    // 7b. Idempotent Server-Issued Referral Rewards
+    match /referralRewards/{rewardId} {
+      allow get: if isValidId(rewardId) &&
+        isSignedIn() &&
+        (existing().referrerUid == request.auth.uid || existing().referredUid == request.auth.uid || isSupportAdmin());
+      allow list: if isSignedIn() && (existing().referrerUid == request.auth.uid || existing().referredUid == request.auth.uid || isSupportAdmin());
+      allow create, update, delete: if isValidId(rewardId) && isAdmin();
+    }
+
+    // 7c. Admin-Controlled Referral Bonus & Qualification Settings
+    match /referralSettings/{settingId} {
+      allow get: if isValidId(settingId) && isSignedIn() && (settingId == 'config' || isSupportAdmin());
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(settingId) && isAdmin() && isValidReferralSettings(incoming()) && incoming().updatedAt == request.time;
+      allow update: if isValidId(settingId) && isAdmin() && isValidReferralSettings(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(settingId) && isAdmin();
+    }
+
+    // 7d. Immutable Referral Security & Anti-Fraud Logs (Support/Admin read-only)
+    match /referralLogs/{logId} {
+      allow get: if isValidId(logId) && isSupportAdmin();
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(logId) && isAdmin() && isValidReferralLog(incoming()) && incoming().logId == logId && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 7e. Privacy-Safe Referral Leaderboard (Authenticated read-only, server/Admin write-only, zero PII)
+    match /referralLeaderboard/{uid} {
+      allow get: if isValidId(uid) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isValidId(uid) && isAdmin() && isValidReferralLeaderboard(incoming()) && incoming().uid == uid && incoming().updatedAt == request.time;
+      allow delete: if isValidId(uid) && isAdmin();
+    }
+
+    // 8. Admin Role Markers (Strictly server/Super Admin SDK governed)
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isSuperAdmin());
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // 9. Admin-Controlled Economy Config
+    match /appConfig/{configId} {
+      allow get: if isValidId(configId) && isSignedIn() && (configId == 'economy' || isSupportAdmin());
+      allow list: if isSupportAdmin();
+      allow create, update: if isValidId(configId) && isAdmin() && isValidEconomyConfig(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(configId) && isAdmin();
+    }
+
+    // 10. Admin-Controlled Advertisements (Only active ads visible to regular users)
+    match /advertisements/{adId} {
+      allow get: if isValidId(adId) && isEmailVerified() && (existing().status == 'active' || isSupportAdmin());
+      allow list: if isEmailVerified() && (existing().status == 'active' || isSupportAdmin());
+      allow create: if isValidId(adId) &&
+        isAdmin() &&
+        isValidAdvertisement(incoming()) &&
+        incoming().adId == adId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          incoming().status == 'inactive' ||
+          (
+            incoming().rewardVerificationMethod != 'none' &&
+            (incoming().adType != 'direct_link' || incoming().incentivizedTrafficAllowed == true)
+          )
+        );
+      allow update: if isValidId(adId) &&
+        isAdmin() &&
+        isValidAdvertisement(incoming()) &&
+        incoming().adId == existing().adId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          incoming().status == 'inactive' ||
+          (
+            incoming().rewardVerificationMethod != 'none' &&
+            (incoming().adType != 'direct_link' || incoming().incentivizedTrafficAllowed == true)
+          )
+        );
+      allow delete: if isValidId(adId) && isAdmin();
+    }
+
+    // 11. Ad Watching Sessions (Users can only initiate pending sessions; completion is server-only)
+    match /adSessions/{sessionId} {
+      allow get: if isValidId(sessionId) && isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow create: if isValidId(sessionId) &&
+        isEmailVerified() &&
+        isValidAdSession(incoming()) &&
+        incoming().sessionId == sessionId &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().transactionId == '' &&
+        incoming().rejectionReason == '' &&
+        incoming().createdAt == request.time &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active' &&
+        exists(/databases/$(database)/documents/advertisements/$(incoming().adId)) &&
+        get(/databases/$(database)/documents/advertisements/$(incoming().adId)).data.status == 'active' &&
+        get(/databases/$(database)/documents/advertisements/$(incoming().adId)).data.rewardVerificationMethod != 'none' &&
+        (
+          get(/databases/$(database)/documents/advertisements/$(incoming().adId)).data.adType != 'direct_link' ||
+          get(/databases/$(database)/documents/advertisements/$(incoming().adId)).data.incentivizedTrafficAllowed == true
+        );
+      allow update: if isValidId(sessionId) && (
+        isAdmin() ||
+        (
+          isEmailVerified() &&
+          isValidAdSession(incoming()) &&
+          existing().userId == request.auth.uid &&
+          existing().status == 'pending' &&
+          incoming().status == 'rejected' &&
+          incoming().sessionId == existing().sessionId &&
+          incoming().userId == existing().userId &&
+          incoming().adId == existing().adId &&
+          incoming().adName == existing().adName &&
+          incoming().adNetwork == existing().adNetwork &&
+          incoming().expectedRewardPoints == existing().expectedRewardPoints &&
+          incoming().dhakaDate == existing().dhakaDate &&
+          incoming().transactionId == '' &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rejectionReason'])
+        )
+      );
+      allow delete: if isValidId(sessionId) && isAdmin();
+    }
+
+    // 12. Server-Verified Idempotent Ad Completions (Read-only for owner & support)
+    match /adCompletions/{completionId} {
+      allow get: if isValidId(completionId) && isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow create, update, delete: if isValidId(completionId) && isAdmin();
+    }
+
+    // 13. Daily Ad Limits (Asia/Dhaka counters, read-only for owner & support)
+    match /dailyAdLimits/{limitId} {
+      allow get: if isValidId(limitId) && isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow create, update, delete: if isValidId(limitId) && isAdmin();
+    }
+
+    // 14. Server-Governed Transactions Ledger (Read-only for owner & support)
+    match /transactions/{txId} {
+      allow get: if isValidId(txId) && isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isSupportAdmin());
+      allow create, update, delete: if isValidId(txId) && isAdmin();
+    }
+
+    // 15. Server-Governed Daily Bonus Streak State
+    match /dailyBonuses/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 16. Fraud & Suspicious Callback Logs (Support/Admin read, Admin/Server write)
+    match /fraudLogs/{logId} {
+      allow get: if isValidId(logId) && isSupportAdmin();
+      allow list: if isSupportAdmin();
+      allow create, update, delete: if isValidId(logId) && isAdmin();
+    }
+
+    // 16b. Failed Transaction Monitoring Logs (Immutable)
+    match /failedTransactionLogs/{logId} {
+      allow get: if isValidId(logId) && isSupportAdmin();
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(logId) && isAdmin() && isValidFailedTransactionLog(incoming()) && incoming().logId == logId && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 16c. Wallet vs Ledger Reconciliation Reports (Immutable)
+    match /reconciliationReports/{reportId} {
+      allow get: if isValidId(reportId) && isSupportAdmin();
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(reportId) && isAdmin() && isValidReconciliationReport(incoming()) && incoming().reportId == reportId && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 16d. System Error Logs (Signed-in append-only for own errors; Support/Admin read)
+    match /systemErrors/{errorId} {
+      allow get: if isValidId(errorId) && isSupportAdmin();
+      allow list: if isSupportAdmin();
+      allow create: if isValidId(errorId) && isSignedIn() && isValidSystemError(incoming()) && incoming().errorId == errorId && incoming().userId == request.auth.uid && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 17. User Notifications
+    match /notifications/{notifId} {
+      allow get: if isValidId(notifId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create, delete: if isValidId(notifId) && isAdmin();
+      allow update: if isValidId(notifId) &&
+        isSignedIn() &&
+        isValidNotification(incoming()) && (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid &&
+            incoming().userId == existing().userId &&
+            incoming().title == existing().title &&
+            incoming().message == existing().message &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+          )
+        );
+    }
+
+    // 17b. Admin Notification Read State (per-admin)
+    match /adminNotificationReads/{adminId} {
+      allow get: if isValidId(adminId) && isOwner(adminId) && isSupportAdmin();
+      allow list: if isSuperAdmin();
+      allow create, update: if isValidId(adminId) &&
+        isOwner(adminId) &&
+        isSupportAdmin() &&
+        isValidAdminNotificationReadState(incoming()) &&
+        incoming().adminUid == request.auth.uid &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(adminId) && (isOwner(adminId) || isSuperAdmin());
+    }
+
+    // 18. Connection Health Check Document
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow create, update: if docId == 'connection' &&
+        isSuperAdmin() &&
+        incoming().keys().hasAll(['status']) &&
+        incoming().keys().hasOnly(['status', 'updatedAt']) &&
+        incoming().status is string &&
+        incoming().status.size() >= 1 &&
+        incoming().status.size() <= 40 &&
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
+      allow list, delete: if false;
+    }
+
+    // 19. Ad Networks Public Configuration (Admin/Support read, Admin write; NEVER stores secrets)
+    match /adNetworks/{networkId} {
+      allow get, list: if isSupportAdmin();
+      allow create, update: if isValidId(networkId) &&
+        isAdmin() &&
+        isValidAdNetwork(incoming()) &&
+        incoming().networkId == networkId &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(networkId) && isSuperAdmin();
+    }
+
+    // 20. Ad Network Private Secrets (STRICTLY Server / Admin SDK ONLY; ZERO client reads or writes)
+    match /adNetworkSecrets/{networkId} {
+      allow read, write: if false;
+    }
+
+    // 21. Ad Placements & Direct Links (Admin/Support read, Admin write with Direct Link policy check)
+    match /adPlacements/{placementId} {
+      allow get, list: if isSupportAdmin();
+      allow create, update: if isValidId(placementId) &&
+        isAdmin() &&
+        isValidAdPlacement(incoming()) &&
+        incoming().placementId == placementId &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(placementId) && isAdmin();
+    }
+
+    // 22. Ad Campaigns (Admin-governed with policy & daily cap constraints)
+    match /adCampaigns/{campaignId} {
+      allow get, list: if isSupportAdmin();
+      allow create, update: if isValidId(campaignId) &&
+        isAdmin() &&
+        isValidAdCampaign(incoming()) &&
+        incoming().campaignId == campaignId &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(campaignId) && isAdmin();
+    }
+
+    // 23. S2S Postback & Callback Verification Ledger (Support/Admin read-only; strictly Cloud Function written)
+    match /adCallbacks/{callbackId} {
+      allow get, list: if isSupportAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // 24. Per-Network Verified Ad Analytics (Support/Admin read, Admin/Server update)
+    match /adAnalytics/{analyticsId} {
+      allow get, list: if isSupportAdmin();
+      allow create, update: if isValidId(analyticsId) &&
+        isAdmin() &&
+        isValidAdAnalytics(incoming()) &&
+        incoming().analyticsId == analyticsId &&
+        incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 25. Ad Network Operational & Callback Failure Logs (Immutable)
+    match /adNetworkLogs/{logId} {
+      allow get, list: if isSupportAdmin();
+      allow create: if isValidId(logId) &&
+        isAdmin() &&
+        isValidAdNetworkLog(incoming()) &&
+        incoming().logId == logId &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 26. Risk-Scored Fraud Monitoring Reports (Support/Admin read, Admin review update, zero deletion)
+    match /fraudReports/{reportId} {
+      allow get, list: if isSupportAdmin();
+      allow create: if isValidId(reportId) &&
+        isAdmin() &&
+        isValidFraudReport(incoming()) &&
+        incoming().reportId == reportId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(reportId) &&
+        isAdmin() &&
+        isValidFraudReport(incoming()) &&
+        incoming().reportId == existing().reportId &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 27. Immutable System-Wide Security Audit Logs (Support/Admin read-only; no update or delete)
+    match /securityAuditLogs/{logId} {
+      allow get, list: if isSupportAdmin();
+      allow create: if isValidId(logId) &&
+        isAdmin() &&
+        isValidSecurityAuditLog(incoming()) &&
+        incoming().logId == logId &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 28. Server-Only Rate Limit Buckets (Zero client read/write access)
+    match /rateLimits/{limitId} {
+      allow read, write: if false;
+    }
+
+    // 29. Admin-Managed Multi Direct Link Ads (Active slots readable for placement display; Admin-only write; zero fake rewards)
+    match /directLinkAds/{linkId} {
+      allow get: if isValidId(linkId) && (existing().status == 'active' || isSupportAdmin());
+      allow list: if existing().status == 'active' || isSupportAdmin();
+      allow create: if isValidId(linkId) &&
+        isAdmin() &&
+        isValidDirectLinkAd(incoming()) &&
+        incoming().linkId == linkId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(linkId) &&
+        isAdmin() &&
+        isValidDirectLinkAd(incoming()) &&
+        incoming().linkId == existing().linkId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(linkId) && isAdmin();
+    }
+  }
+}
